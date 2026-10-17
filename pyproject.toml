@@ -1,0 +1,27 @@
+[project]
+name = "qdrant-mcp"
+version = "0.1.0"
+description = "MCP server exposing a Qdrant vector store organised as directories"
+requires-python = ">=3.11"
+dependencies = [
+    "qdrant-client>=1.12",
+    "mcp>=2.0",
+    "fastembed>=0.4",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+qdrant-mcp = "qdrant_mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::UserWarning"]
