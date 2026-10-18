@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import webbrowser
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
@@ -11,6 +12,8 @@ from qdrant_client import QdrantClient
 
 from .config import Config
 from .embeddings import FastEmbedder
+from .render import build_server as build_viewer_server
+from .render import export_html as export_vault_html
 from .vault import Vault, VaultError
 
 LOGGER = logging.getLogger("qdrant_mcp")
@@ -200,6 +203,44 @@ def build_server(
     def stats() -> dict[str, Any]:
         """Vault overview: directories, total points, embedding model and vector size."""
         return {"ok": True, **vault.stats()}
+
+    # ------------------------------------------------------------- human view
+
+    @server.tool()
+    @guarded
+    def export_html(
+        destination: str = "vault.html",
+        title: str = "qdrant vault",
+        include_content: bool = True,
+        max_mb: int = 64,
+    ) -> dict[str, Any]:
+        """Export the whole vault as ONE self-contained HTML file (no CDN, no build).
+
+        The page has a collapsible directory tree, a filter box and a content pane.
+
+        Args:
+            destination: output path; parent directories are created.
+            title: document title.
+            include_content: false embeds only the tree, for huge vaults.
+            max_mb: refuse to build a file larger than this.
+        """
+        return {"ok": True, **export_vault_html(vault, destination=destination, title=title, include_content=include_content, max_mb=max_mb)}
+
+    @server.tool()
+    @guarded
+    def serve_html(host: str = "127.0.0.1", port: int = 8765, title: str = "qdrant vault", open_browser: bool = False) -> dict[str, Any]:
+        """Serve the same viewer over localhost, loading file contents on demand.
+
+        Blocks until interrupted; use it when the vault is too large for a single file.
+        """
+        httpd = build_viewer_server(vault, host=host, port=port, title=title)
+        if open_browser:
+            webbrowser.open(f"http://{host}:{httpd.server_address[1]}/")
+        try:
+            httpd.serve_forever()
+        finally:
+            httpd.server_close()
+        return {"ok": True}
 
     return server
 

@@ -7,7 +7,6 @@ arquivo é um *point* dentro dela.
 ```
 vault-notes         -> collection `vault-notes`
   week1/intro.md    -> point, payload.path = "week1/intro.md"
-  week1/bruno.md
   week2/kafka.md
 vault-docs
   readme.md         -> point, payload.path = "readme.md"
@@ -36,6 +35,8 @@ vetor — por isso `read` devolve o texto exato e `search` devolve o trecho.
 | `dir_info` | `dir_info(dir)` | pontos e tamanho do vetor de um diretório |
 | `dir_delete` | `dir_delete(dir, delete_points?)` | apaga o diretório |
 | `stats` | `stats()` | visão geral do vault |
+| `export_html` | `export_html(destination, title?, include_content?, max_mb?)` | gera **um** arquivo HTML autocontido com o vault |
+| `serve_html` | `serve_html(host, port, title?, open_browser?)` | mesmo viewer em localhost, conteúdo sob demanda |
 
 Semântica que importa:
 
@@ -94,6 +95,44 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 > Trocar `EMBED_MODEL` com dados já gravados exige recriar as collections
 > (dimensões e espaçamento vetorial mudam).
 
+## Visualizador HTML
+
+Um único arquivo `.html`, sem CDN, sem web font, sem build — a página inteira
+(incluindo o JS) é gerada em `src/qdrant_mcp/render.py`.
+
+```bash
+# arquivo único, com todo o conteúdo embutido (pode abrir direto no navegador)
+.venv/bin/qdrant-vault export -o vault.html
+
+# vault grande: servidor local, conteúdo buscado por arquivo
+.venv/bin/qdrant-vault serve --port 8765
+```
+
+O que tem na página:
+
+- **árvore** de diretórios derivada dos `filepath`s, com abrir/fechar por
+  diretório (estado guardado em `sessionStorage`) e tamanho de cada arquivo;
+- **filtro** que casa nome e (no modo estático) conteúdo, com contador;
+- **pane de conteúdo** com breadcrumb, `updated_at`, revisão, tags, metadata
+  JSON, botão de copiar e um renderizador mínimo de markdown (títulos, listas,
+  blockquote, código inline e em bloco, links, negrito/itálico);
+- tema claro/escuro por `prefers-color-scheme`; `file://` e `http://` funcionam
+  igual.
+
+Dois modos, mesma página:
+
+| Modo | Dados | Quando usar |
+|---|---|---|
+| estático | `files` embutido no `<script>` | vault pequeno, arquivo para enviar/arquivar |
+| api | só a árvore; conteúdo vem de `GET /api/files?path=...` | vault grande, dados sempre frescos |
+
+Segurança do payload: o JSON é escrito com `<`, `>` e `&` escapados para
+`\u003c`/`\u003e`/`\u0026`, então conteúdo não consegue fechar a tag `<script>`;
+o renderizador escapa todo texto e só aceita links `http(s)`, `mailto:`,
+âncoras e caminhos relativos — `javascript:` vira texto puro. Isso é testado em
+`tests/test_renderer_js.py`, que executa o JS do renderer sob Node (pulado se
+Node não existir).
+
 ## Decisões de projeto
 
 - **Collection por diretório** dá isolamento real: busca por diretório é uma
@@ -110,3 +149,5 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 - **Embeddings locais via fastembed** — sem chave de API e sem dado saindo da
   máquina. O caminho do arquivo entra no texto embeddings (`File: <path>\n\n<conteúdo>`)
   para que conteúdos iguais em pastas diferentes fiquem distinguíveis.
+- **Viewer em um arquivo só** evita introduzir um front-end no projeto; o modo
+  api existe só para não carregar MBs de texto dentro do HTML.
